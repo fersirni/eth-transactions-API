@@ -14,8 +14,8 @@ export class Provider {
         return Provider.getTransactionByHash(filter?.hash);
       } else if (!!filter?.blockNumber) {
         return Provider.getTransactionsByBlock(filter?.blockNumber);
-      } else if (!!filter?.from) {
-        return Provider.getTransactionsHistory(filter?.from);
+      } else if (!!filter?.from || !!filter?.to) {
+        return Provider.getTransactionsHistory(filter?.from, filter?.to);
       } else {
         return Provider.getTransactionsByBlock("latest");
       }
@@ -50,13 +50,33 @@ export class Provider {
   }
 
   static async getTransactionsHistory(
-    from: string
+    from: string | undefined,
+    to: string | undefined
   ): Promise<Array<TransactionResponse>> {
     try {
-      return provider.getHistory(from);
+      if (!!from && !!to) {
+        const txs = await provider.getHistory(from);
+        const txsFromTo = txs.filter(tx => {
+          return (tx.from === from && tx.to === to) || (tx.from === to && tx.to === from);
+        });
+        return txsFromTo;
+      } else if (!!from) {
+        const txs = await provider.getHistory(from);
+        const txsFrom = txs.filter(tx => {
+          return (tx.from === from);
+        });
+        return txsFrom;
+      } else if (!!to) {
+        const txs = await provider.getHistory(to);
+        const txsTo = txs.filter(tx => {
+          return (tx.to === to);
+        });
+        return txsTo;
+      }
+      throw new Error(`from: ${from} and to: ${to} properties cannot be both undefined.`);
     } catch (error) {
       throw new Error(
-        `Error while getting transactions history from: ${from}. Error: ${error}`
+        `Error while getting transactions history from: ${from} to: ${to}. Error: ${error}`
       );
     }
   }
@@ -64,18 +84,8 @@ export class Provider {
   static subscribeToNewBlockEvent(db: Storage) {
     provider.on("block", async (blockNumber) => {
       console.log("New block found! Block number: " + blockNumber);
-      const blockTransactions = await Provider.getTransactionsByBlock(
-        blockNumber
-      );
-      db.saveTransactions(blockTransactions);
+      const txs = await Provider.getTransactionsByBlock(blockNumber);
+      db.saveTransactions(txs);
     });
   }
-
-  // const filter = {
-  //     //address: THE_ADDRESS_OF_YOUR_CONTRACT,
-  //     topics: [
-  //         // the name of the event, parnetheses containing the data type of each event, no spaces
-  //         ethers.utils.id("Transfer(address,address,uint256)")
-  //     ]
-  // }
 }
